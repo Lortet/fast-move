@@ -81,7 +81,14 @@ class admin_plugin_move_tree extends DokuWiki_Admin_Plugin
             if ($this->getConf('autoskip')) $cb->attr('checked', 'checked');
 
             $cb = $form->addCheckbox('autorewrite', $this->getLang('autorewrite'));
-            if ($this->getConf('autorewrite')) $cb->attr('checked', 'checked');
+            $cb->attr('checked', 'checked');
+
+            $cb = $form->addCheckbox('copyonly', $this->getLang('copyonly'));
+            $cb->attr('checked', 'checked');
+
+            $cb = $form->addCheckbox('copyacl', $this->getLang('copyacl'));
+            $cb->attr('checked', 'checked');
+            $form->addCheckbox('copylinkedmedia', $this->getLang('copylinkedmedia'));
 
             $form->addButton('submit', $this->getLang('btn_start'));
             echo $form->toHTML();

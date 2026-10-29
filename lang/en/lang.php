@@ -81,6 +81,7 @@ $lang['content_to_move']      = 'Content to move:';
 $lang['copyonly']             = 'Copy only and keep the originals (rewrite links in copied pages)';
 $lang['ignorelocks']          = 'Ignore DokuWiki page locks (does not bypass permissions or destination conflicts).';
 $lang['copyacl']              = 'Copy explicit ACL rules to the new tree (copy-only mode).';
+$lang['copylinkedmedia']      = 'Also copy linked media outside the selection into the target folder (copy-only mode).';
 $lang['copyacl_failed']       = 'Could not copy ACL rules: the ACL file is unavailable or not writable.';
 $lang['autoskip']             = 'Ignore errors and skip pages or files that can\'t be moved';
 $lang['autoskip_progress']    = 'Ignore errors and continue automatically (items that fail will be skipped)';

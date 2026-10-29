@@ -71,6 +71,7 @@ $lang['copyonly']              = 'Copier uniquement et conserver les originaux (
 $lang['autoskip']              = 'Ignorer les erreurs et passer les pages ou fichiers qui ne peuvent être déplacés.';
 $lang['ignorelocks']           = 'Ignorer les verrous de page DokuWiki (ne contourne pas les permissions ni les conflits de destination).';
 $lang['copyacl']               = 'Copier les règles ACL explicites vers la nouvelle arborescence (copie uniquement).';
+$lang['copylinkedmedia']       = 'Copier aussi les médias liés hors de la sélection dans le dossier cible (copie uniquement).';
 $lang['copyacl_failed']        = 'Impossible de copier les règles ACL : le fichier ACL est inaccessible ou non modifiable.';
 $lang['autoskip_progress']     = 'Ignorer les erreurs et continuer automatiquement (les éléments en erreur seront ignorés).';
 $lang['autorewrite']           = 'Récrire les liens à l\'issue du déplacement.';

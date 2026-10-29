@@ -213,7 +213,26 @@ class helper_plugin_move_op extends DokuWiki_Plugin {
      */
     public function copyMedia($src, $dst) {
         $this->lastWarning = false;
-        if(!$this->checkMedia($src, $dst)) return false;
+        if(!file_exists(mediaFN($src))) {
+            msg(sprintf($this->getLang('medianotexist'), $src), -1);
+            return false;
+        }
+        if(auth_quickaclcheck($src) < AUTH_READ) {
+            msg(sprintf($this->getLang('nomediarights'), $src), -1);
+            return false;
+        }
+        if(@file_exists(mediaFN($dst))) {
+            msg(sprintf($this->getLang('mediaexists'), $src, $dst), -1);
+            return false;
+        }
+        if(auth_quickaclcheck($dst) < AUTH_UPLOAD) {
+            msg(sprintf($this->getLang('nomediatargetperms'), $dst), -1);
+            return false;
+        }
+        if(pathinfo(mediaFN($src), PATHINFO_EXTENSION) !== pathinfo(mediaFN($dst), PATHINFO_EXTENSION)) {
+            msg($this->getLang('extensionchange'), -1);
+            return false;
+        }
 
         io_createNamespace($dst, 'media');
         if(!@copy(mediaFN($src), mediaFN($dst))) {

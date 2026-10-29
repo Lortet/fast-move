@@ -122,9 +122,10 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             // options
             'autoskip'    => $this->getConf('autoskip'),
             'ignorelocks' => false,
-            'copyacl'     => false,
+            'copyacl'     => true,
+            'copylinkedmedia' => false,
             'autorewrite' => $this->getConf('autorewrite'),
-            'copyonly'    => false,
+            'copyonly'    => true,
 
             // errors
             'lasterror'   => false
@@ -368,6 +369,10 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
         }
 
         if($this->options['copyonly']) {
+            if(!empty($this->options['copylinkedmedia'])) {
+                $this->addLinkedMediaToCopyPlan();
+            }
+
             $copyMaps = array(
                 'pages' => array_merge($this->tmpstore['miss'], $this->tmpstore['pages']),
                 'media' => array_merge($this->tmpstore['miss_media'], $this->tmpstore['media']),
@@ -394,6 +399,68 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
         $this->saveOptions();
 
         return true;
+    }
+
+    /**
+     * Add media referenced by copied pages when those files are outside the selected scope.
+     */
+    protected function addLinkedMediaToCopyPlan() {
+        $pageMaps = array_merge($this->tmpstore['miss'], $this->tmpstore['pages']);
+        $mediaMaps = array_merge($this->tmpstore['miss_media'], $this->tmpstore['media']);
+
+        foreach($pageMaps as $srcPage => $dstPage) {
+            if(!page_exists($srcPage)) continue;
+
+            $references = p_get_metadata($srcPage, 'relation media', METADATA_RENDER_UNLIMITED);
+            if(!is_array($references)) continue;
+
+            $targetNamespace = $this->getLinkedMediaTargetNamespace($srcPage, $dstPage);
+            if($targetNamespace === '') $targetNamespace = 'copied_media';
+
+            foreach(array_keys($references) as $srcMedia) {
+                $srcMedia = cleanID($srcMedia);
+                if(isset($mediaMaps[$srcMedia]) || !@file_exists(mediaFN($srcMedia))) continue;
+
+                $dstMedia = cleanID($targetNamespace . ':' . $srcMedia);
+                if($srcMedia === $dstMedia) continue;
+
+                $this->addToDocumentList($srcMedia, $dstMedia, self::TYPE_MEDIA);
+                $this->tmpstore['media'][$srcMedia] = $dstMedia;
+                $mediaMaps[$srcMedia] = $dstMedia;
+            }
+        }
+    }
+
+    /**
+     * Resolve the destination namespace corresponding to a copied page.
+     */
+    protected function getLinkedMediaTargetNamespace($srcPage, $dstPage) {
+        $bestLength = -1;
+        $targetNamespace = null;
+
+        foreach($this->plan as $move) {
+            if($move['type'] !== self::TYPE_PAGES) continue;
+
+            if($move['class'] === self::CLASS_NS) {
+                $srcNamespace = trim($move['src'], ':');
+                if(
+                    $srcNamespace !== '' &&
+                    $srcPage !== $srcNamespace &&
+                    strpos($srcPage, $srcNamespace . ':') !== 0
+                ) continue;
+
+                $length = strlen($srcNamespace);
+                if($length > $bestLength) {
+                    $bestLength = $length;
+                    $targetNamespace = trim($move['dst'], ':');
+                }
+            } elseif($move['class'] === self::CLASS_DOC && $move['src'] === $srcPage) {
+                $targetNamespace = getNS($move['dst']);
+                $bestLength = PHP_INT_MAX;
+            }
+        }
+
+        return $targetNamespace === null ? getNS($dstPage) : $targetNamespace;
     }
 
     /**

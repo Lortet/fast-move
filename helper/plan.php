@@ -122,6 +122,7 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             // options
             'autoskip'    => $this->getConf('autoskip'),
             'ignorelocks' => false,
+            'copyacl'     => false,
             'autorewrite' => $this->getConf('autorewrite'),
             'copyonly'    => false,
 
@@ -370,7 +371,13 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             $copyMaps = array(
                 'pages' => array_merge($this->tmpstore['miss'], $this->tmpstore['pages']),
                 'media' => array_merge($this->tmpstore['miss_media'], $this->tmpstore['media']),
+                'namespaces' => array(),
             );
+            foreach($this->plan as $move) {
+                if($move['class'] === self::CLASS_NS && $move['type'] === self::TYPE_PAGES) {
+                    $copyMaps['namespaces'][$move['src'] . ':*'] = rtrim($move['dst'], ':') . ':*';
+                }
+            }
             io_saveFile($this->files['copymap'], serialize($copyMaps));
             $this->tmpstore['miss'] = array();
             $this->tmpstore['miss_media'] = array();
@@ -442,6 +449,10 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
         }
 
         helper_plugin_move_rewrite::removeAllLocks();
+
+        if($this->options['copyonly'] && !empty($this->options['copyacl'])) {
+            if(!$this->copyAclRules()) return $this->storeError();
+        }
 
         if($this->options['autorewrite'] && @filesize($this->files['affected']) > 1) {
             $todo = $this->stepThroughAffectedPages();
@@ -710,6 +721,66 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             'pages' => isset($maps['pages']) && is_array($maps['pages']) ? $maps['pages'] : array(),
             'media' => isset($maps['media']) && is_array($maps['media']) ? $maps['media'] : array(),
         );
+    }
+
+    /** Copy explicit ACL entries for copied pages and namespaces to their new IDs. */
+    protected function copyAclRules() {
+        global $AUTH_ACL, $config_cascade;
+
+        if(empty($config_cascade['acl']['default']) || !is_writable($config_cascade['acl']['default'])) {
+            msg($this->getLang('copyacl_failed'), -1);
+            return false;
+        }
+
+        $maps = $this->getCopyMaps();
+        $scopeMap = array_merge($maps['pages'], isset($maps['namespaces']) ? $maps['namespaces'] : array());
+        uksort($scopeMap, function($a, $b) { return strlen($b) - strlen($a); });
+
+        $lines = is_array($AUTH_ACL) ? $AUTH_ACL : file($config_cascade['acl']['default']);
+        if(!is_array($lines)) {
+            msg($this->getLang('copyacl_failed'), -1);
+            return false;
+        }
+
+        $existing = array();
+        foreach($lines as $line) {
+            if(preg_match('/^([^\s#]+)[ \t]+([^\s#]+)[ \t]+(\d+)/', $line, $match)) {
+                $existing[$match[1] . "\t" . $match[2]] = true;
+            }
+        }
+
+        $additions = array();
+        foreach($lines as $line) {
+            if(!preg_match('/^([^\s#]+)([ \t]+[^\s#]+[ \t]+\d+.*)$/', $line, $match)) continue;
+            $sourceScope = $match[1];
+            $targetScope = false;
+            foreach($scopeMap as $src => $dst) {
+                if(substr($src, -2) === ':*') {
+                    $prefix = substr($src, 0, -1);
+                    if(strpos($sourceScope, $prefix) === 0) {
+                        $targetScope = substr($dst, 0, -1) . substr($sourceScope, strlen($prefix));
+                        break;
+                    }
+                } elseif($sourceScope === $src) {
+                    $targetScope = $dst;
+                    break;
+                }
+            }
+            if($targetScope === false || $targetScope === $sourceScope) continue;
+            $rule = rtrim($targetScope . $match[2], "\r\n") . "\n";
+            preg_match('/^[^\s]+[ \t]+([^\s]+)/', $rule, $principal);
+            if(isset($principal[1]) && isset($existing[$targetScope . "\t" . $principal[1]])) continue;
+            $additions[] = $rule;
+            if(isset($principal[1])) $existing[$targetScope . "\t" . $principal[1]] = true;
+        }
+
+        if(!$additions) return true;
+        if(!io_saveFile($config_cascade['acl']['default'], implode('', $additions), true)) {
+            msg($this->getLang('copyacl_failed'), -1);
+            return false;
+        }
+        $AUTH_ACL = file($config_cascade['acl']['default']);
+        return true;
     }
 
     /**

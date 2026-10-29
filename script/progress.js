@@ -35,6 +35,7 @@ jQuery('#plugin_move__progress').each(function () {
     var nextStep = function(skip) {
         // clear error output
         $this.find('.output').html('');
+        $this.find('.output').removeClass('has-error');
 
         $this.find('.controls img').removeClass('hide');
         setButtons(false);
@@ -44,20 +45,25 @@ jQuery('#plugin_move__progress').each(function () {
             DOKU_BASE + 'lib/exe/ajax.php',
             {
                 call: 'plugin_move_progress',
-                skip: skip
+                skip: skip === true || skip === '1',
+                autoskip: $this.find('.move-autoskip-toggle').is(':checked')
             },
             function (data) {
                 $progressbar.progressbar('option', 'value', data.progress);
                 $this.find('.controls img').addClass('hide');
+                $this.find('.move-log-content').html(data.log);
 
                 if (data.error) {
-                    $this.find('.output').html('<p><div class="error">' + data.error + '</div></p>');
-                    setButtons(true);
+                    $this.find('.output').html('<p><div class="error">' + data.error + '</div></p>').addClass('has-error');
+                    if($this.find('.move-autoskip-toggle').is(':checked')) {
+                        nextStep(true);
+                    } else {
+                        setButtons(true);
+                    }
                 } else if (data.complete) {
                     $progressbar.progressbar('option', 'value', 100);
-                    // redirect to start page
-                    alert(LANG.plugins.move.complete);
-                    window.location.href = DOKU_BASE;
+                    $this.find('.output').text(LANG.plugins.move.complete);
+                    $this.find('.controls form').addClass('hide');
                 } else {
                     // do it again
                     nextStep(skip);
@@ -80,6 +86,12 @@ jQuery('#plugin_move__progress').each(function () {
 
         // step on it
         nextStep(skip);
+    });
+
+    $this.find('.move-autoskip-toggle').change(function() {
+        if(this.checked && $this.find('.output').hasClass('has-error')) {
+            nextStep(true);
+        }
     });
 
 });

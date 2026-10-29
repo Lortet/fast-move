@@ -28,11 +28,19 @@ $lang['extensionchange']    = 'Extension of the new file is not the same as the 
 
 // system errors
 $lang['indexerror']          = 'Error while updating the search index %s';
+$lang['indexpageerror']      = 'Could not update the page index while moving %1$s to %2$s. Indexer detail: %3$s';
+$lang['indexreferenceerror'] = 'Could not update page references while moving %1$s to %2$s. Indexer detail: %3$s';
+$lang['indexmediaerror']     = 'Could not update media references while moving %1$s to %2$s. Indexer detail: %3$s';
+$lang['indexpage_missing']   = 'Page %1$s was missing from the search index. The move to %2$s will continue; saving the page will add it to the index again.';
+$lang['index_write_failed']  = 'the index could not be written';
+$lang['index_no_detail']     = 'DokuWiki returned no additional detail';
 $lang['metamoveerror']       = 'The meta files of page %s couldn\'t be moved';
 $lang['atticmoveerror']      = 'The attic files of page %s couldn\'t be moved. Please move them manually.';
 $lang['mediametamoveerror']  = 'The meta files of the media file %s couldn\'t be moved';
 $lang['mediamoveerror']      = 'Moving the media file %s failed';
 $lang['mediaatticmoveerror'] = 'The attic files of media file %s couldn\'t be moved. Please move them manually.';
+$lang['copied']              = 'Page copied from %s to %s';
+$lang['copyfailed']          = 'Could not copy %s to %s';
 
 // changelog summaries
 $lang['renamed']     = 'Page name changed from %s to %s';
@@ -50,6 +58,14 @@ $lang['btn_continue'] = 'Continue';
 $lang['btn_retry']    = 'Retry item';
 $lang['btn_skip']     = 'Skip item';
 $lang['btn_abort']    = 'Abort';
+$lang['log_title']    = 'Move log';
+$lang['log_empty']    = 'No files to move.';
+$lang['log_done']     = 'Done';
+$lang['log_copied']   = 'Copied';
+$lang['log_error']    = 'Error';
+$lang['log_warning']  = 'Moved with warning';
+$lang['log_skipped']  = 'Skipped';
+$lang['log_pending']  = 'Pending';
 
 // Form labels
 $lang['legend']               = 'Move current page or namespace';
@@ -57,7 +73,9 @@ $lang['movepage']             = 'Move page';
 $lang['movens']               = 'Move namespace';
 $lang['dst']                  = 'New name:';
 $lang['content_to_move']      = 'Content to move:';
+$lang['copyonly']             = 'Copy only and keep the originals (do not rewrite links)';
 $lang['autoskip']             = 'Ignore errors and skip pages or files that can\'t be moved';
+$lang['autoskip_progress']    = 'Ignore errors and continue automatically (items that fail will be skipped)';
 $lang['autorewrite']          = 'Rewrite links right after the move completed';
 $lang['move_pages']           = 'Pages';
 $lang['move_media']           = 'Media files';

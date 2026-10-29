@@ -6,3 +6,4 @@ $lang['dual']        = 'Should pages and media files be shown separatly? If disa
 $lang['autoskip']    = 'Enable automatic skipping of errors in namespace moves by default.';
 $lang['autorewrite'] = 'Enable automatic link rewriting after namespace moves by default.';
 $lang['pagetools_integration'] = 'Add renaming button to pagetools';
+$lang['executionbudget'] = 'Percentage of PHP max execution time used per move request (33 by default)';

@@ -11,3 +11,4 @@ $lang['dual']                  = 'Montrer pages et médias séparément ? Si vue
 $lang['autoskip']              = 'Par défaut, ignorer les erreurs de déplacement de catégories.';
 $lang['autorewrite']           = 'Activer par défaut la ré-écriture automatique des liens après déplacement de catégories.';
 $lang['pagetools_integration'] = 'Ajouter un bouton « renommage » aux outils de page';
+$lang['executionbudget'] = 'Pourcentage du temps maximal PHP utilisé par requête de déplacement (33 par défaut)';

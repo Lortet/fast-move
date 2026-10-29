@@ -43,7 +43,8 @@ class action_plugin_move_progress extends DokuWiki_Action_Plugin {
         $return = array(
             'error'    => '',
             'complete' => false,
-            'progress' => 0
+            'progress' => 0,
+            'log'      => ''
         );
 
         /** @var helper_plugin_move_plan $plan */
@@ -53,11 +54,13 @@ class action_plugin_move_progress extends DokuWiki_Action_Plugin {
             // There is no plan. Something went wrong
             $return['complete'] = true;
         } else {
+            $plan->setAutoSkip($INPUT->bool('autoskip'));
             $todo               = $plan->nextStep($INPUT->bool('skip'));
             $return['progress'] = $plan->getProgress();
             $return['error']    = $plan->getLastError();
             if($todo === 0) $return['complete'] = true;
         }
+        $return['log'] = $plan->logHTML();
 
         header('Content-Type: application/json');
         echo json_encode($return);

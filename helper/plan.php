@@ -64,6 +64,12 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
     /** @var helper_plugin_move_op $MoveOperator */
     protected $MoveOperator = null;
 
+    /** @var string|null Current operation log file */
+    protected $logFile = null;
+
+    /** @var float Request start time used to bound work by PHP's execution limit */
+    protected $executionStartedAt = 0.0;
+
     /**
      * Constructor
      *
@@ -86,6 +92,9 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
         $this->MoveOperator = plugin_load('helper', 'move_op');
 
         $this->loadOptions();
+        if($this->options['started']) {
+            $this->logFile = $this->getLogFile($this->options['started']);
+        }
     }
 
     /**
@@ -112,6 +121,7 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             // options
             'autoskip'    => $this->getConf('autoskip'),
             'autorewrite' => $this->getConf('autorewrite'),
+            'copyonly'    => false,
 
             // errors
             'lasterror'   => false
@@ -158,6 +168,17 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
      */
     public function setOption($name, $value) {
         $this->options[$name] = $value;
+    }
+
+    /**
+     * Update and persist the automatic error-skip setting during execution.
+     *
+     * @param bool $enabled
+     * @return bool
+     */
+    public function setAutoSkip($enabled) {
+        $this->options['autoskip'] = (bool) $enabled;
+        return $this->saveOptions();
     }
 
     /**
@@ -331,12 +352,18 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
                     // FIXME we use this to move namespace subscriptions later on and for now only do it on
                     //       page namespace moves, but subscriptions work for both, but what when only one of
                     //       them is moved? Should it be copied then? Complicated. This is good enough for now
-                    $this->addToDocumentList($move['src'], $move['dst'], self::CLASS_NS);
+                    if(!$this->options['copyonly']) {
+                        $this->addToDocumentList($move['src'], $move['dst'], self::CLASS_NS);
+                    }
                 }
-                $this->findMissingDocuments($move['src'] . ':', $move['dst'],$move['type']);
+                if(!$this->options['copyonly']) {
+                    $this->findMissingDocuments($move['src'] . ':', $move['dst'],$move['type']);
+                }
             }
             // store what pages are affected by this move
-            $this->findAffectedPages($move['src'], $move['dst'], $move['class'], $move['type']);
+            if(!$this->options['copyonly']) {
+                $this->findAffectedPages($move['src'], $move['dst'], $move['class'], $move['type']);
+            }
         }
 
         $this->storeDocumentLists();
@@ -361,6 +388,13 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
      */
     public function nextStep($skip = false) {
         if(!$this->options['committed']) throw new Exception('plan is not committed yet!');
+
+        $this->executionStartedAt = isset($_SERVER['REQUEST_TIME_FLOAT'])
+            ? (float) $_SERVER['REQUEST_TIME_FLOAT']
+            : microtime(true);
+
+        // A retry or an explicit skip resolves the previous error state.
+        $this->clearError();
 
         // execution has started
         if(!$this->options['started']) $this->options['started'] = time();
@@ -458,6 +492,72 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
     }
 
     /**
+     * Render move operations with their current status.
+     *
+     * @return string
+     */
+    public function logHTML() {
+        $entries = array();
+
+        if($this->logFile && is_readable($this->logFile)) {
+            foreach(file($this->logFile, FILE_IGNORE_NEW_LINES) as $line) {
+                $parts = explode("\t", $line, 7);
+                if(count($parts) < 6) continue;
+                $key = $parts[2] . "\t" . $parts[3] . "\t" . $parts[4];
+                $entries[$key] = array(
+                    'type' => $parts[2],
+                    'src' => $parts[3],
+                    'dst' => $parts[4],
+                    'status' => $parts[5],
+                    'message' => isset($parts[6]) ? $parts[6] : '',
+                );
+            }
+        }
+
+        foreach(array('P' => 'pagelist', 'M' => 'medialist') as $type => $list) {
+            if(!is_readable($this->files[$list])) continue;
+            foreach(file($this->files[$list], FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+                $parts = explode("\t", $line, 2);
+                if(count($parts) !== 2) continue;
+                $key = $type . "\t" . $parts[0] . "\t" . $parts[1];
+                if(!isset($entries[$key])) {
+                    $entries[$key] = array(
+                        'type' => $type,
+                        'src' => $parts[0],
+                        'dst' => $parts[1],
+                        'status' => 'pending',
+                        'message' => '',
+                    );
+                }
+            }
+        }
+
+        if(!$entries) return '<p class="move-log-empty">' . hsc($this->getLang('log_empty')) . '</p>';
+
+        $labels = array(
+            'success' => $this->getLang('log_done'),
+            'copied' => $this->getLang('log_copied'),
+            'failed' => $this->getLang('log_error'),
+            'warning' => $this->getLang('log_warning'),
+            'skipped' => $this->getLang('log_skipped'),
+            'pending' => $this->getLang('log_pending'),
+        );
+        $html = '<div class="move-log-list">';
+        foreach($entries as $entry) {
+            $status = isset($labels[$entry['status']]) ? $entry['status'] : 'pending';
+            $label = $labels[$status];
+            $kind = $entry['type'] === 'M' ? $this->getLang('move_media') : $this->getLang('move_pages');
+            $html .= '<details class="move-log-entry move-log-' . hsc($status) . '">';
+            $html .= '<summary><span class="move-log-status">' . hsc($label) . '</span> ' . hsc($entry['src']) . '</summary>';
+            $html .= '<div class="move-log-details"><p>' . hsc($kind) . ': ' . hsc($entry['src']) . ' → ' . hsc($entry['dst']) . '</p>';
+            if($entry['message'] !== '') $html .= '<p class="move-log-message">' . hsc($entry['message']) . '</p>';
+            $html .= '</div></details>';
+        }
+        $html .= '</div>';
+        return $html;
+    }
+
+    /**
      * Step through the next bunch of pages or media files
      *
      * @param int  $type (self::TYPE_PAGES|self::TYPE_MEDIA)
@@ -469,18 +569,19 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
         if($type == self::TYPE_PAGES) {
             $file    = $this->files['pagelist'];
             $mark    = 'P';
-            $call    = 'movePage';
+            $call    = $this->options['copyonly'] ? 'copyPage' : 'movePage';
             $items_run_counter = 'pages_run';
         } else {
             $file    = $this->files['medialist'];
             $mark    = 'M';
-            $call    = 'moveMedia';
+            $call    = $this->options['copyonly'] ? 'copyMedia' : 'moveMedia';
             $items_run_counter = 'media_run';
         }
 
         $doclist = fopen($file, 'a+');
 
         for($i = 0; $i < helper_plugin_move_plan::OPS_PER_RUN; $i++) {
+            if($i > 0 && !$this->hasExecutionTimeRemaining()) break;
             $log = "";
             $line = $this->getLastLine($doclist);
             if($line === false) {
@@ -491,6 +592,7 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             // should this item be skipped?
             if($skip === true) {
                 $skip = false;
+                $log .= $this->buildSkippedLogLine($mark, $src, $dst);
             } else {
             // move the page
                 if(!$this->MoveOperator->$call($src, $dst)) {
@@ -504,7 +606,14 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
                         break;
                     }
                 } else {
-                    $log .= $this->build_log_line($mark, $src, $dst, true); // SUCCESS!
+                    $warning = $this->MoveOperator->getLastWarning();
+                    if($this->options['copyonly']) {
+                        $log .= $this->buildCopyLogLine($mark, $src, $dst);
+                    } elseif($warning) {
+                        $log .= $this->buildWarningLogLine($mark, $src, $dst, $warning);
+                    } else {
+                        $log .= $this->build_log_line($mark, $src, $dst, true); // SUCCESS!
+                    }
                 }
             }
 
@@ -538,6 +647,7 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
         // handle affected pages
         $doclist = fopen($this->files['affected'], 'a+');
         for($i = 0; $i < helper_plugin_move_plan::OPS_PER_RUN; $i++) {
+            if($i > 0 && !$this->hasExecutionTimeRemaining()) break;
             $page = $this->getLastLine($doclist);
             if($page === false) break;
 
@@ -552,6 +662,23 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
 
         fclose($doclist);
         return $this->options['affpg_run'];
+    }
+
+    /**
+     * Check whether another page operation fits within the configured PHP time budget.
+     * The first item in a request is always allowed so the move can make progress.
+     *
+     * @return bool
+     */
+    protected function hasExecutionTimeRemaining() {
+        $maxExecutionTime = (int) ini_get('max_execution_time');
+        if($maxExecutionTime <= 0) return true;
+
+        $percentage = (float) $this->getConf('executionbudget');
+        $percentage = max(1, min(100, $percentage));
+        $budget = $maxExecutionTime * ($percentage / 100);
+
+        return (microtime(true) - $this->executionStartedAt) < $budget;
     }
 
     /**
@@ -939,6 +1066,49 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
     }
 
     /**
+     * Create a log entry for an item explicitly skipped by the user.
+     *
+     * @param string $type
+     * @param string $from
+     * @param string $to
+     * @return string
+     */
+    protected function buildSkippedLogLine($type, $from, $to) {
+        $now = time();
+        $date = date('Y-m-d H:i:s', $now);
+        return "$now\t$date\t$type\t$from\t$to\tskipped\t\n";
+    }
+
+    /**
+     * Create a log entry for a successful move with an index warning.
+     *
+     * @param string $type
+     * @param string $from
+     * @param string $to
+     * @param string $warning
+     * @return string
+     */
+    protected function buildWarningLogLine($type, $from, $to, $warning) {
+        $now = time();
+        $date = date('Y-m-d H:i:s', $now);
+        return "$now\t$date\t$type\t$from\t$to\twarning\t$warning\n";
+    }
+
+    /**
+     * Create a log entry for an item copied instead of moved.
+     *
+     * @param string $type
+     * @param string $from
+     * @param string $to
+     * @return string
+     */
+    protected function buildCopyLogLine($type, $from, $to) {
+        $now = time();
+        $date = date('Y-m-d H:i:s', $now);
+        return "$now\t$date\t$type\t$from\t$to\tcopied\t\n";
+    }
+
+    /**
      * write log to file
      *
      * @param $log
@@ -946,8 +1116,19 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
     protected function write_log ($log) {
         global $conf;
         $optime = $this->options['started'];
-        $file   = $conf['cachedir'] . '/move/' . dformat($optime, '%Y%m%d-%H%M%S') . '.log';
-        io_saveFile($file, $log, true);
+        $this->logFile = $this->getLogFile($optime);
+        io_saveFile($this->logFile, $log, true);
+    }
+
+    /**
+     * Get the log filename for a move operation.
+     *
+     * @param int $timestamp
+     * @return string
+     */
+    protected function getLogFile($timestamp) {
+        global $conf;
+        return $conf['cachedir'] . '/move/' . dformat($timestamp, '%Y%m%d-%H%M%S') . '.log';
     }
 
 }

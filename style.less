@@ -127,6 +127,38 @@
             }
         }
     }
+
+    .move-log {
+        margin-top: 1.5em;
+
+        .move-log-entry {
+            margin: .25em 0;
+            padding: .35em .6em;
+            border: 1px solid @ini_border;
+            border-radius: .25em;
+
+            summary {
+                cursor: pointer;
+            }
+
+            .move-log-status {
+                display: inline-block;
+                min-width: 7em;
+                font-weight: bold;
+            }
+
+            &.move-log-success .move-log-status { color: #287a36; }
+            &.move-log-copied .move-log-status { color: #287a36; }
+            &.move-log-failed .move-log-status { color: #a00; }
+            &.move-log-warning .move-log-status { color: #8a6500; }
+            &.move-log-skipped .move-log-status { color: #8a6500; }
+            &.move-log-pending .move-log-status { color: #666; }
+
+            .move-log-details {
+                margin: .5em 0 0 1.5em;
+            }
+        }
+    }
 }
 
 /**

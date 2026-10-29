@@ -22,6 +22,18 @@ class helper_plugin_move_op extends DokuWiki_Plugin {
      */
     protected $affectedPages = array();
 
+    /** @var string|false Non-fatal warning from the most recent operation */
+    protected $lastWarning = false;
+
+    /**
+     * Get the non-fatal warning from the most recent move.
+     *
+     * @return string|false
+     */
+    public function getLastWarning() {
+        return $this->lastWarning;
+    }
+
     /**
      * Check if the given page can be moved to the given destination
      *
@@ -116,6 +128,51 @@ class helper_plugin_move_op extends DokuWiki_Plugin {
     }
 
     /**
+     * Copy a page while keeping the original page in place.
+     *
+     * @param string $src original ID
+     * @param string $dst new ID
+     * @return bool
+     */
+    public function copyPage($src, $dst) {
+        $this->lastWarning = false;
+        if(!$this->checkPage($src, $dst)) return false;
+
+        lock($src);
+        $text = rawWiki($src);
+        unlock($src);
+
+        $summary = '↷ ' . sprintf($this->getLang('copied'), $src, $dst);
+        saveWikiText($dst, $text, $summary);
+        if(!page_exists($dst)) {
+            msg(sprintf($this->getLang('copyfailed'), $src, $dst), -1);
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Copy a media file while keeping the original file in place.
+     *
+     * @param string $src original ID
+     * @param string $dst new ID
+     * @return bool
+     */
+    public function copyMedia($src, $dst) {
+        $this->lastWarning = false;
+        if(!$this->checkMedia($src, $dst)) return false;
+
+        io_createNamespace($dst, 'media');
+        if(!@copy(mediaFN($src), mediaFN($dst))) {
+            msg(sprintf($this->getLang('copyfailed'), $src, $dst), -1);
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Execute a page move/rename
      *
      * @param string $src original ID
@@ -123,6 +180,7 @@ class helper_plugin_move_op extends DokuWiki_Plugin {
      * @return bool
      */
     public function movePage($src, $dst) {
+        $this->lastWarning = false;
         if(!$this->checkPage($src, $dst)) return false;
 
         // lock rewrites
@@ -170,12 +228,24 @@ class helper_plugin_move_op extends DokuWiki_Plugin {
 
             // Move the Subscriptions & Indexes (new feature since Spring 2013 release)
             $Indexer = idx_get_indexer();
-            if(($idx_msg = $Indexer->renamePage($src, $dst)) !== true
-                || ($idx_msg = $Indexer->renameMetaValue('relation_references', $src, $dst)) !== true
-            ) {
-                msg(sprintf($this->getLang('indexerror'), $idx_msg), -1);
+            $idx_msg = $Indexer->renamePage($src, $dst);
+            if($idx_msg === 'page is not in index') {
+                $this->lastWarning = sprintf($this->getLang('indexpage_missing'), $src, $dst);
+            } elseif($idx_msg !== true) {
+                msg(sprintf($this->getLang('indexpageerror'), $src, $dst, $this->describeIndexError($idx_msg)), -1);
+                unlock($src);
+                helper_plugin_move_rewrite::removeLock();
                 return false;
             }
+
+            $idx_msg = $Indexer->renameMetaValue('relation_references', $src, $dst);
+            if($idx_msg !== true) {
+                msg(sprintf($this->getLang('indexreferenceerror'), $src, $dst, $this->describeIndexError($idx_msg)), -1);
+                unlock($src);
+                helper_plugin_move_rewrite::removeLock();
+                return false;
+            }
+
             if(!$FileMover->movePageMeta($src_ns, $src_name, $dst_ns, $dst_name)) {
                 msg(sprintf($this->getLang('metamoveerror'), $src), -1);
                 return false;
@@ -236,6 +306,7 @@ class helper_plugin_move_op extends DokuWiki_Plugin {
      * @return bool true if the move was successfully executed
      */
     public function moveMedia($src, $dst) {
+        $this->lastWarning = false;
         if(!$this->checkMedia($src, $dst)) return false;
 
         // get all pages using this media
@@ -273,7 +344,7 @@ class helper_plugin_move_op extends DokuWiki_Plugin {
             // Move the Subscriptions & Indexes (new feature since Spring 2013 release)
             $Indexer = idx_get_indexer();
             if(($idx_msg = $Indexer->renameMetaValue('relation_media', $src, $dst)) !== true) {
-                msg(sprintf($this->getLang('indexerror'), $idx_msg), -1);
+                msg(sprintf($this->getLang('indexmediaerror'), $src, $dst, $this->describeIndexError($idx_msg)), -1);
                 return false;
             }
             if(!$FileMover->moveMediaMeta($src_ns, $src_name, $dst_ns, $dst_name)) {
@@ -310,6 +381,18 @@ class helper_plugin_move_op extends DokuWiki_Plugin {
         $this->affectedPages = $affected_pages;
 
         return true;
+    }
+
+    /**
+     * Make indexer return values useful in user-facing diagnostics.
+     *
+     * @param mixed $error
+     * @return string
+     */
+    protected function describeIndexError($error) {
+        if($error === false) return $this->getLang('index_write_failed');
+        if($error === null || $error === '') return $this->getLang('index_no_detail');
+        return (string) $error;
     }
 
     /**

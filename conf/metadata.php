@@ -6,3 +6,4 @@ $meta['dual'] = array('onoff');
 $meta['autoskip'] = array('onoff');
 $meta['autorewrite'] = array('onoff');
 $meta['pagetools_integration'] = array('onoff');
+$meta['executionbudget'] = array('numeric');

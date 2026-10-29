@@ -103,6 +103,7 @@ class admin_plugin_move_main extends DokuWiki_Admin_Plugin {
 
         $this->plan->setOption('autoskip', $INPUT->bool('autoskip'));
         $this->plan->setOption('autorewrite', $INPUT->bool('autorewrite'));
+        $this->plan->setOption('copyonly', $INPUT->bool('copyonly'));
 
         if($ID && $INPUT->has('dst')) {
             // input came from form
@@ -191,6 +192,7 @@ class admin_plugin_move_main extends DokuWiki_Admin_Plugin {
 
         $form->addElement(form_makeCheckboxField('autoskip', '1', $this->getLang('autoskip'), '', 'block', ($this->getConf('autoskip') ? array('checked' => 'checked') : array())));
         $form->addElement(form_makeCheckboxField('autorewrite', '1', $this->getLang('autorewrite'), '', 'block', ($this->getConf('autorewrite') ? array('checked' => 'checked') : array())));
+        $form->addElement(form_makeCheckboxField('copyonly', '1', $this->getLang('copyonly'), '', 'block'));
 
         $form->addElement(form_makeButton('submit', 'admin', $this->getLang('btn_start')));
         $form->endFieldset();
@@ -219,6 +221,13 @@ class admin_plugin_move_main extends DokuWiki_Admin_Plugin {
         }
 
         echo '<div class="progress" data-progress="' . $progress . '">' . $progress . '%</div>';
+
+        $checked = $this->plan->getOption('autoskip') ? ' checked="checked"' : '';
+        echo '<p class="move-autoskip"><label><input type="checkbox" class="move-autoskip-toggle" value="1"' . $checked . '> ';
+        echo hsc($this->getLang('autoskip_progress')) . '</label></p>';
+
+        echo '<section class="move-log"><h3>' . hsc($this->getLang('log_title')) . '</h3>';
+        echo '<div class="move-log-content">' . $this->plan->logHTML() . '</div></section>';
 
         echo '<div class="output">';
         if($this->plan->getLastError()) {

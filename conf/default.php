@@ -7,3 +7,4 @@ $conf['autoskip'] = 0;
 $conf['autorewrite'] = 1;
 $conf['pagetools_integration'] = 1;
 $conf['executionbudget'] = 33;
+$conf['start_page_template'] = "====== ~~TITLE~~ ======\n";

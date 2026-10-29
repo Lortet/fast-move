@@ -12,3 +12,4 @@ $lang['autoskip']              = 'Par défaut, ignorer les erreurs de déplaceme
 $lang['autorewrite']           = 'Activer par défaut la ré-écriture automatique des liens après déplacement de catégories.';
 $lang['pagetools_integration'] = 'Ajouter un bouton « renommage » aux outils de page';
 $lang['executionbudget'] = 'Pourcentage du temps maximal PHP utilisé par requête de déplacement (33 par défaut)';
+$lang['start_page_template'] = 'Modèle par défaut de la page d’accueil (~~TITLE~~ sera remplacé par le nom du dossier)';

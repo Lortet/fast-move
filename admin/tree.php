@@ -91,7 +91,7 @@ class admin_plugin_move_tree extends DokuWiki_Admin_Plugin
             $form->addCheckbox('copylinkedmedia', $this->getLang('copylinkedmedia'));
             $form->addCheckbox('create_start_pages', $this->getLang('create_start_pages'));
             $form->addTextarea('start_page_template', $this->getLang('start_page_template'))
-                ->val("====== TITLE ======\n")
+                ->val($this->getConf('start_page_template'))
                 ->attrs(['rows' => 6, 'class' => 'edit']);
 
             $form->addButton('submit', $this->getLang('btn_start'));

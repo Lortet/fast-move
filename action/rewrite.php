@@ -32,6 +32,7 @@ class action_plugin_move_rewrite extends DokuWiki_Action_Plugin {
     function handle_read(Doku_Event $event, $param) {
         global $ACT, $conf;
         static $stack = array();
+        if(!empty($GLOBALS['PLUGIN_MOVE_SAVING_REWRITE'])) return;
         // handle only reads of the current revision
         if($event->data[3]) return;
 

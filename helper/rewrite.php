@@ -327,7 +327,17 @@ class helper_plugin_move_rewrite extends Plugin {
                         $oldRev = filemtime(wikiFN($id));
                         if($oldRev == time()) sleep(1);
 
-                        saveWikiText($id, $text, $this->symbol . ' ' . $this->getLang('linkchange'), $this->getConf('minor'));
+                        $GLOBALS['PLUGIN_MOVE_SAVING_REWRITE'] = isset($GLOBALS['PLUGIN_MOVE_SAVING_REWRITE'])
+                            ? $GLOBALS['PLUGIN_MOVE_SAVING_REWRITE'] + 1
+                            : 1;
+                        try {
+                            saveWikiText($id, $text, $this->symbol . ' ' . $this->getLang('linkchange'), $this->getConf('minor'));
+                        } finally {
+                            $GLOBALS['PLUGIN_MOVE_SAVING_REWRITE']--;
+                            if($GLOBALS['PLUGIN_MOVE_SAVING_REWRITE'] <= 0) {
+                                unset($GLOBALS['PLUGIN_MOVE_SAVING_REWRITE']);
+                            }
+                        }
                     }
                     $this->unsetMoveMeta($id);
                 } else {

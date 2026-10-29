@@ -111,7 +111,7 @@ class admin_plugin_move_main extends DokuWiki_Admin_Plugin {
         $this->plan->setOption('create_start_pages', $INPUT->bool('create_start_pages'));
         $startPageTemplate = $INPUT->has('start_page_template')
             ? $INPUT->str('start_page_template')
-            : "====== TITLE ======\n";
+            : $this->getConf('start_page_template');
         $this->plan->setOption('start_page_template', $startPageTemplate);
 
         if($ID && $INPUT->has('dst')) {
@@ -225,7 +225,7 @@ class admin_plugin_move_main extends DokuWiki_Admin_Plugin {
         $form->addElement(form_makeCheckboxField('copyacl', '1', $this->getLang('copyacl'), '', 'block', array('checked' => 'checked')));
         $form->addElement(form_makeCheckboxField('copylinkedmedia', '1', $this->getLang('copylinkedmedia'), '', 'block'));
         $form->addElement(form_makeCheckboxField('create_start_pages', '1', $this->getLang('create_start_pages'), '', 'block'));
-        $form->addElement('<label class="block">' . hsc($this->getLang('start_page_template')) . '<textarea name="start_page_template" rows="6" class="edit">' . hsc("====== TITLE ======\n") . '</textarea></label>');
+        $form->addElement('<label class="block">' . hsc($this->getLang('start_page_template')) . '<textarea name="start_page_template" rows="6" class="edit">' . hsc($this->getConf('start_page_template')) . '</textarea></label>');
 
         $form->addElement(form_makeButton('submit', 'admin', $this->getLang('btn_start')));
         $form->endFieldset();

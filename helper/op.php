@@ -199,7 +199,9 @@ class helper_plugin_move_op extends DokuWiki_Plugin {
         /** @var helper_plugin_move_rewrite $Rewriter */
         $Rewriter = plugin_load('helper', 'move_rewrite');
         $Rewriter->setCopyMoveMeta($dst, $src, $this->copyPageMoves, $this->copyMediaMoves);
-        if($Rewriter->rewritePage($dst) === false) return false;
+        // Pass the original text explicitly: reading the destination while the move lock is
+        // active returns an in-memory rewrite that is intentionally not saved by the read hook.
+        if($Rewriter->rewritePage($dst, $text) === false) return false;
 
         return true;
     }

@@ -7,3 +7,4 @@ $lang['autoskip']    = 'Enable automatic skipping of errors in namespace moves b
 $lang['autorewrite'] = 'Enable automatic link rewriting after namespace moves by default.';
 $lang['pagetools_integration'] = 'Add renaming button to pagetools';
 $lang['executionbudget'] = 'Percentage of PHP max execution time used per move request (33 by default)';
+$lang['start_page_template'] = 'Default start page template (~~TITLE~~ is replaced with the folder name)';

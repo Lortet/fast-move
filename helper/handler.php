@@ -148,8 +148,8 @@ class helper_plugin_move_handler extends Plugin {
         $old = cleanID($old);
 
         foreach($moves as $move) {
-            if($move[0] == $old) {
-                $old = $move[1];
+            if(cleanID($move[0]) == $old) {
+                $old = cleanID($move[1]);
             }
         }
 

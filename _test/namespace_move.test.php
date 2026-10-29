@@ -27,8 +27,45 @@ class plugin_move_namespace_move_test extends DokuWikiTest {
         io_rmdir(DOKU_TMP_DATA."pages/newns",true);
         io_rmdir(DOKU_TMP_DATA."media/newns",true);
         io_rmdir(DOKU_TMP_DATA."meta/newns",true);
+        foreach(array('wiki-xxx', 'ccc', 'drafts') as $namespace) {
+            io_rmdir(DOKU_TMP_DATA . 'pages/' . $namespace, true);
+            io_rmdir(DOKU_TMP_DATA . 'media/' . $namespace, true);
+            io_rmdir(DOKU_TMP_DATA . 'meta/' . $namespace, true);
+        }
 
         parent::tearDown();
+    }
+
+    /** @group slow */
+    public function test_copy_rewrites_absolute_root_media_link_to_copied_media() {
+        global $AUTH_ACL;
+        $AUTH_ACL[] = "*\t@ALL\t255";
+
+        $sourcePage = 'wiki-xxx:yyy:accueil';
+        $sourceMedia = 'drafts:xxx.jpg';
+        saveWikiText($sourcePage, '{{:' . $sourceMedia . '}}', 'setup');
+
+        $mediaFile = mediaFN($sourceMedia);
+        io_makeFileDir($mediaFile);
+        io_saveFile($mediaFile, 'test image');
+
+        /** @var helper_plugin_move_plan $plan */
+        $plan = plugin_load('helper', 'move_plan');
+        $plan->setOption('copyonly', true);
+        $plan->setOption('copylinkedmedia', true);
+        $plan->addPageNamespaceMove('wiki-xxx', 'ccc');
+        $this->assertTrue($plan->commit());
+
+        $result = null;
+        for($i = 0; $i < 10 && $result !== 0; $i++) {
+            $result = $plan->nextStep();
+            $this->assertNotFalse($result, $plan->getLastError());
+        }
+
+        $this->assertSame(0, $result);
+        $this->assertFileExists(mediaFN('ccc:drafts:xxx.jpg'));
+        $this->assertStringContainsString('{{ccc:drafts:xxx.jpg}}', rawWiki('ccc:yyy:accueil'));
+        $this->assertFileExists(mediaFN($sourceMedia));
     }
 
     /** @group slow */
@@ -45,7 +82,7 @@ class plugin_move_namespace_move_test extends DokuWikiTest {
         /** @var helper_plugin_move_plan $plan */
         $plan = plugin_load('helper', 'move_plan');
         $plan->setOption('create_start_pages', true);
-        $plan->setOption('start_page_template', "====== TITLE ======\nWelcome");
+        $plan->setOption('start_page_template', "====== ~~TITLE~~ ======\nWelcome");
         $plan->addMediaNamespaceMove($sourceNamespace, $targetNamespace);
         $this->assertTrue($plan->commit());
 

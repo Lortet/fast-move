@@ -129,7 +129,7 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             'autorewrite' => $this->getConf('autorewrite'),
             'copyonly'    => true,
             'create_start_pages' => false,
-            'start_page_template' => "====== TITLE ======\n",
+            'start_page_template' => $this->getConf('start_page_template'),
 
             // errors
             'lasterror'   => false
@@ -593,7 +593,7 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
                 }
             } else {
                 $title = ucfirst(str_replace('_', ' ', noNS($namespace)));
-                $text = str_replace('TITLE', $title, $this->options['start_page_template']);
+                $text = str_replace(array('~~TITLE~~', 'TITLE'), $title, $this->options['start_page_template']);
                 saveWikiText($page, $text, $this->getLang('start_page_created_summary'));
                 if(!page_exists($page)) {
                     msg(sprintf($this->getLang('start_page_create_failed'), $page), -1);

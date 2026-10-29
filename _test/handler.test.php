@@ -66,4 +66,17 @@ class plugin_move_handler_test extends DokuWikiTest {
         }
     }
 
+    public function test_resolveAbsoluteRootMediaWhenCopyingNamespace() {
+        $handler = new helper_plugin_move_handler();
+        $handler->init(
+            'ccc:yyy:accueil',
+            'wiki-xxx:yyy:accueil',
+            array(),
+            array(array(':drafts:xxx.jpg', ':ccc:drafts:xxx.jpg')),
+            array()
+        );
+
+        $this->assertSame('ccc:drafts:xxx.jpg', $handler->resolveMoves(':drafts:xxx.jpg', 'media'));
+    }
+
 }

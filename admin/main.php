@@ -192,6 +192,7 @@ class admin_plugin_move_main extends DokuWiki_Admin_Plugin {
         $form->startFieldset($this->getLang('legend'));
 
         $currentNamespace = getNS($ID);
+        if($currentNamespace === false) $currentNamespace = '';
         $namespaceLabel = $currentNamespace === '' ? $this->getLang('root') . ' <code>:</code>' : '<code>' . $currentNamespace . '</code>';
         $form->addElement(form_makeRadioField('class', 'page', $this->getLang('movepage') . ' <code>' . $ID . '</code>', '', 'block radio click-page', array('checked' => 'checked')));
         $form->addElement(form_makeRadioField('class', 'namespace', $this->getLang('movens') . ' ' . $namespaceLabel, '', 'block radio click-ns'));
@@ -245,14 +246,13 @@ class admin_plugin_move_main extends DokuWiki_Admin_Plugin {
 
         }
 
-        echo '<div class="progress" data-progress="' . $progress . '">' . $progress . '%</div>';
+        echo '<div class="move-sticky-controls">';
+        $counts = $this->plan->getProgressCounts();
+        echo '<div class="progress" data-progress="' . $progress . '" data-completed="' . $counts['completed'] . '" data-total="' . $counts['total'] . '"></div>';
 
         $checked = $this->plan->getOption('autoskip') ? ' checked="checked"' : '';
         echo '<p class="move-autoskip"><label><input type="checkbox" class="move-autoskip-toggle" value="1"' . $checked . '> ';
         echo hsc($this->getLang('autoskip_progress')) . '</label></p>';
-
-        echo '<section class="move-log"><h3>' . hsc($this->getLang('log_title')) . '</h3>';
-        echo '<div class="move-log-content">' . $this->plan->logHTML() . '</div></section>';
 
         echo '<div class="output">';
         if($this->plan->getLastError()) {
@@ -262,8 +262,7 @@ class admin_plugin_move_main extends DokuWiki_Admin_Plugin {
         }
         echo '</div>';
 
-        // display all buttons but toggle visibility according to state
-        echo '<p></p>';
+        // Keep actions beside the progress bar while the journal scrolls.
         echo '<div class="controls">';
         echo '<img src="' . DOKU_BASE . 'lib/images/throbber.gif" class="hide" />';
         $this->btn('start', !$this->plan->inProgress());
@@ -272,6 +271,10 @@ class admin_plugin_move_main extends DokuWiki_Admin_Plugin {
         $this->btn('continue', $this->plan->inProgress() && !$this->plan->getLastError());
         $this->btn('abort');
         echo '</div>';
+        echo '</div>';
+
+        echo '<section class="move-log"><h3>' . hsc($this->getLang('log_title')) . '</h3>';
+        echo '<div class="move-log-content">' . $this->plan->logHTML() . '</div></section>';
 
         echo '</div>';
     }

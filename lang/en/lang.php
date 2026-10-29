@@ -103,6 +103,16 @@ $lang['js']['newname']    = 'New name:';
 $lang['js']['rename_media']  = 'Move referenced media files along with the page';
 $lang['js']['inprogress'] = 'renaming page and adjusting links...';
 $lang['js']['complete']   = 'Move operation finished.';
+$lang['js']['completed_title'] = 'Move completed!';
+$lang['js']['duration']   = 'Finished in %1$s min %2$s sec.';
+$lang['js']['impacts_title'] = 'Potentially modified folders and files';
+$lang['js']['summary_title'] = 'Move summary';
+$lang['js']['summary_moved'] = 'items moved';
+$lang['js']['summary_copied'] = 'items copied';
+$lang['js']['summary_failed'] = 'with errors';
+$lang['js']['summary_skipped'] = 'skipped';
+$lang['js']['summary_warning'] = 'with warnings';
+$lang['js']['progress_count'] = '%1$s / %2$s items processed (%3$s %)';
 
 // Tree Manager
 $lang['root']             = '[Root namespace]';

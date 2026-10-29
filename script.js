@@ -1,7 +1,7 @@
 /**
  * includes all needed JavaScript for the move plugin
  *
- * be sure to touch this file when one of the scripts has been updated to refresh caching
+ * Touch this file when included scripts, translations, or progress UI change to refresh DokuWiki's cache.
  */
 
 /* DOKUWIKI:include_once script/json2.js */

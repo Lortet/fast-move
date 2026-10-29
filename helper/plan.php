@@ -208,6 +208,17 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
         return round((($max - $remain) * 100) / $max, 2);
     }
 
+    /** Return completed and total progress units, including link rewrites when enabled. */
+    public function getProgressCounts() {
+        $total = (int) $this->options['pages_all'] + (int) $this->options['media_all'];
+        $remaining = (int) $this->options['pages_run'] + (int) $this->options['media_run'];
+        if($this->options['autorewrite']) {
+            $total += (int) $this->options['affpg_all'];
+            $remaining += (int) $this->options['affpg_run'];
+        }
+        return array('completed' => max(0, $total - $remaining), 'total' => $total);
+    }
+
     /**
      * Check if there is a move in progress currently
      *
@@ -387,6 +398,8 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             $this->tmpstore['miss'] = array();
             $this->tmpstore['miss_media'] = array();
         }
+
+        $this->options['impact_paths'] = $this->buildImpactPaths();
 
         $this->storeDocumentLists();
 
@@ -581,6 +594,134 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
         return $html;
     }
 
+    /** Return filesystem path patterns affected by the committed plan. */
+    public function getImpactPaths() {
+        return isset($this->options['impact_paths']) && is_array($this->options['impact_paths'])
+            ? $this->options['impact_paths']
+            : array();
+    }
+
+    /** Build a deduplicated list of data-directory patterns before work lists are consumed. */
+    protected function buildImpactPaths() {
+        global $conf;
+
+        $paths = array();
+        $copyOnly = !empty($this->options['copyonly']);
+        $pageIds = array_merge($this->tmpstore['pages'], $this->tmpstore['miss']);
+        $mediaIds = array_merge($this->tmpstore['media'], $this->tmpstore['miss_media']);
+
+        foreach($pageIds as $src => $dst) {
+            if(!$copyOnly) {
+                $this->addImpactNamespace($paths, $conf['datadir'], $src);
+                $this->addImpactNamespace($paths, $conf['metadir'], $src);
+                $this->addImpactNamespace($paths, $conf['olddir'], $src);
+            }
+            $this->addImpactNamespace($paths, $conf['datadir'], $dst);
+            $this->addImpactNamespace($paths, $conf['metadir'], $dst);
+            if(!$copyOnly) $this->addImpactNamespace($paths, $conf['olddir'], $dst);
+        }
+
+        foreach($mediaIds as $src => $dst) {
+            if(!$copyOnly) {
+                $this->addImpactNamespace($paths, $conf['mediadir'], $src);
+                $this->addImpactNamespace($paths, $conf['mediametadir'], $src);
+                $this->addImpactNamespace($paths, $conf['mediaolddir'], $src);
+            }
+            $this->addImpactNamespace($paths, $conf['mediadir'], $dst);
+            $this->addImpactNamespace($paths, $conf['mediametadir'], $dst);
+            if(!$copyOnly) $this->addImpactNamespace($paths, $conf['mediaolddir'], $dst);
+        }
+
+        if(!$copyOnly && !empty($this->options['autorewrite'])) {
+            foreach($this->tmpstore['affpg'] as $page => $unused) {
+                $this->addImpactNamespace($paths, $conf['datadir'], $page);
+                $this->addImpactNamespace($paths, $conf['metadir'], $page);
+                $this->addImpactNamespace($paths, $conf['olddir'], $page);
+            }
+        }
+
+        foreach($this->plan as $move) {
+            if($move['class'] !== self::CLASS_NS) continue;
+            if($move['type'] === self::TYPE_MEDIA) {
+                $directories = array($conf['mediadir'], $conf['mediametadir']);
+                if(!$copyOnly) $directories[] = $conf['mediaolddir'];
+            } else {
+                $directories = array($conf['datadir'], $conf['metadir']);
+                if(!$copyOnly) $directories[] = $conf['olddir'];
+            }
+            foreach($directories as $directory) {
+                if(!$copyOnly) $this->addImpactDirectory($paths, $directory, $move['src']);
+                $this->addImpactDirectory($paths, $directory, $move['dst']);
+            }
+        }
+
+        if($pageIds || $mediaIds) $this->addImpactDirectory($paths, $conf['indexdir'], '');
+        if($copyOnly && !empty($this->options['copyacl'])) {
+            global $config_cascade;
+            if(!empty($config_cascade['acl']['default'])) {
+                $acl = $config_cascade['acl']['default'];
+                $paths[$this->relativeImpactPath($acl)] = true;
+            }
+        }
+
+        return $this->factorImpactPaths(array_keys($paths));
+    }
+
+    /** Remove descendant wildcard paths already covered by an ancestor directory. */
+    protected function factorImpactPaths($paths) {
+        $wildcards = array();
+        $exact = array();
+        foreach($paths as $path) {
+            if(substr($path, -2) === '/*') $wildcards[] = $path;
+            else $exact[] = $path;
+        }
+
+        usort($wildcards, function($a, $b) {
+            $length = strlen($a) - strlen($b);
+            return $length === 0 ? strcmp($a, $b) : $length;
+        });
+
+        $kept = array();
+        $coveredPrefixes = array();
+        foreach($wildcards as $path) {
+            $prefix = substr($path, 0, -1);
+            $covered = false;
+            foreach($coveredPrefixes as $parentPrefix) {
+                if(strpos($prefix, $parentPrefix) === 0) {
+                    $covered = true;
+                    break;
+                }
+            }
+            if($covered) continue;
+            $kept[] = $path;
+            $coveredPrefixes[] = $prefix;
+        }
+
+        $paths = array_merge($exact, $kept);
+        sort($paths, SORT_STRING);
+        return $paths;
+    }
+
+    /** Add the directory containing an ID and its matching files to the impact list. */
+    protected function addImpactNamespace(&$paths, $directory, $id) {
+        $namespace = getNS($id);
+        $this->addImpactDirectory($paths, $directory, $namespace === false ? '' : $namespace);
+    }
+
+    /** Add a display-safe relative directory wildcard to the impact list. */
+    protected function addImpactDirectory(&$paths, $directory, $namespace) {
+        $namespace = trim((string) $namespace, ':');
+        $relative = $namespace === '' ? '*' : utf8_encodeFN(str_replace(':', '/', $namespace)) . '/*';
+        $paths[$this->relativeImpactPath(rtrim($directory, '/') . '/' . $relative)] = true;
+    }
+
+    /** Convert an absolute configured path to a path relative to the wiki root when possible. */
+    protected function relativeImpactPath($path) {
+        $root = rtrim(DOKU_INC, '/');
+        if(strpos($path, $root . '/') === 0) return substr($path, strlen($root) + 1);
+        return $path;
+    }
+
     /**
      * Render move operations with their current status.
      *
@@ -660,6 +801,31 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
         }
         $html .= '</div>';
         return $html;
+    }
+
+    /** Count final item statuses for the completion summary. */
+    public function getLogSummary() {
+        $summary = array(
+            'moved' => 0,
+            'copied' => 0,
+            'failed' => 0,
+            'skipped' => 0,
+            'warning' => 0,
+        );
+        if(!$this->logFile || !is_readable($this->logFile)) return $summary;
+
+        $entries = array();
+        foreach(file($this->logFile, FILE_IGNORE_NEW_LINES) as $line) {
+            $parts = explode("\t", $line, 7);
+            if(count($parts) < 6) continue;
+            $key = $parts[2] . "\t" . $parts[3] . "\t" . $parts[4];
+            $entries[$key] = $parts[5];
+        }
+        foreach($entries as $status) {
+            if($status === 'success' || $status === 'warning') $summary['moved']++;
+            if(isset($summary[$status])) $summary[$status]++;
+        }
+        return $summary;
     }
 
     /**

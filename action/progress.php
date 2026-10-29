@@ -54,6 +54,9 @@ class action_plugin_move_progress extends DokuWiki_Action_Plugin {
             // There is no plan. Something went wrong
             $return['complete'] = true;
         } else {
+            $impactPaths = $plan->getImpactPaths();
+            $started = (int) $plan->getOption('started');
+            if(!$started) $started = time();
             $rawSkip = $INPUT->str('skip');
             $rawAutoSkip = $INPUT->str('autoskip');
             $skip = $rawSkip === '1';
@@ -72,8 +75,14 @@ class action_plugin_move_progress extends DokuWiki_Action_Plugin {
             ));
             $todo = $plan->nextStep($skip, $skipSource);
             $return['progress'] = $plan->getProgress();
+            $return['progress_counts'] = $plan->getProgressCounts();
             $return['error']    = $plan->getLastError();
-            if($todo === 0) $return['complete'] = true;
+            if($todo === 0) {
+                $return['complete'] = true;
+                $return['duration'] = $started ? max(0, time() - $started) : 0;
+                $return['impacts'] = $impactPaths;
+                $return['summary'] = $plan->getLogSummary();
+            }
         }
         $return['log'] = $plan->logHTML();
 

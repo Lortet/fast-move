@@ -1,3 +1,21 @@
+jQuery(function() {
+    function updateStartPageTemplate($form) {
+        var $checkbox = $form.find('input[name="create_start_pages"]');
+        var $template = $form.find('textarea[name="start_page_template"]');
+        if (!$checkbox.length || !$template.length) return;
+
+        $template.closest('label').toggle($checkbox.is(':checked'));
+    }
+
+    jQuery('form').each(function() {
+        updateStartPageTemplate(jQuery(this));
+    });
+
+    jQuery(document).on('change', 'input[name="create_start_pages"]', function() {
+        updateStartPageTemplate(jQuery(this).closest('form'));
+    });
+});
+
 jQuery('form.plugin_move_form').each(function(){
     var $form = jQuery(this);
 

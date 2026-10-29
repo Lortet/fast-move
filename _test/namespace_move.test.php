@@ -31,6 +31,36 @@ class plugin_move_namespace_move_test extends DokuWikiTest {
         parent::tearDown();
     }
 
+    /** @group slow */
+    public function test_create_start_page_for_media_only_namespace() {
+        global $AUTH_ACL;
+        $AUTH_ACL[] = "*\t@ALL\t255";
+
+        $sourceNamespace = 'startpagetestsource';
+        $targetNamespace = 'startpagetesttarget';
+        $sourceFile = DOKU_TMP_DATA . 'media/' . $sourceNamespace . '/image.png';
+        io_makeFileDir($sourceFile);
+        io_saveFile($sourceFile, 'test image');
+
+        /** @var helper_plugin_move_plan $plan */
+        $plan = plugin_load('helper', 'move_plan');
+        $plan->setOption('create_start_pages', true);
+        $plan->setOption('start_page_template', "====== TITLE ======\nWelcome");
+        $plan->addMediaNamespaceMove($sourceNamespace, $targetNamespace);
+        $this->assertTrue($plan->commit());
+
+        $result = null;
+        for($i = 0; $i < 10 && $result !== 0; $i++) {
+            $result = $plan->nextStep();
+            $this->assertNotFalse($result, $plan->getLastError());
+        }
+        $this->assertSame(0, $result);
+
+        $this->assertFileExists(mediaFN($targetNamespace . ':image.png'));
+        $this->assertSame("====== Startpagetesttarget ======\nWelcome", rawWiki($targetNamespace . ':start'));
+        $this->assertFileExists(wikiFN($targetNamespace . ':start'));
+    }
+
     /**
      * This is an integration test, which checks the correct working of an entire namespace move.
      * Hence it is not an unittest, hence it @coversNothing

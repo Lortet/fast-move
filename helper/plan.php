@@ -59,6 +59,7 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
         'affpg' => array(),
         'miss'  => array(),
         'miss_media'  => array(),
+        'startpages' => array(),
     );
 
     /** @var helper_plugin_move_op $MoveOperator */
@@ -88,6 +89,7 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             'missing'    => $conf['metadir'] . '/__move_missing',
             'missing_media'    => $conf['metadir'] . '/__move_missing_media',
             'copymap'    => $conf['metadir'] . '/__move_copymap',
+            'startpages' => $conf['metadir'] . '/__move_startpages',
         );
 
         $this->MoveOperator = plugin_load('helper', 'move_op');
@@ -126,6 +128,8 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             'copylinkedmedia' => false,
             'autorewrite' => $this->getConf('autorewrite'),
             'copyonly'    => true,
+            'create_start_pages' => false,
+            'start_page_template' => "====== TITLE ======\n",
 
             // errors
             'lasterror'   => false
@@ -203,6 +207,8 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             $max += $this->options['affpg_all'];
             $remain += $this->options['affpg_run'];
         }
+        $max += isset($this->options['startpages_all']) ? $this->options['startpages_all'] : 0;
+        $remain += isset($this->options['startpages_run']) ? $this->options['startpages_run'] : 0;
 
         if($max == 0) return 0;
         return round((($max - $remain) * 100) / $max, 2);
@@ -216,6 +222,8 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             $total += (int) $this->options['affpg_all'];
             $remaining += (int) $this->options['affpg_run'];
         }
+        $total += isset($this->options['startpages_all']) ? (int) $this->options['startpages_all'] : 0;
+        $remaining += isset($this->options['startpages_run']) ? (int) $this->options['startpages_run'] : 0;
         return array('completed' => max(0, $total - $remaining), 'total' => $total);
     }
 
@@ -384,6 +392,8 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
                 $this->addLinkedMediaToCopyPlan();
             }
 
+            $this->prepareStartPages();
+
             $copyMaps = array(
                 'pages' => array_merge($this->tmpstore['miss'], $this->tmpstore['pages']),
                 'media' => array_merge($this->tmpstore['miss_media'], $this->tmpstore['media']),
@@ -397,6 +407,8 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             io_saveFile($this->files['copymap'], serialize($copyMaps));
             $this->tmpstore['miss'] = array();
             $this->tmpstore['miss_media'] = array();
+        } else {
+            $this->prepareStartPages();
         }
 
         $this->options['impact_paths'] = $this->buildImpactPaths();
@@ -532,19 +544,79 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
 
         helper_plugin_move_rewrite::removeAllLocks();
 
-        if($this->options['copyonly'] && !empty($this->options['copyacl'])) {
-            if(!$this->copyAclRules()) return $this->storeError();
-        }
-
         if($this->options['autorewrite'] && @filesize($this->files['affected']) > 1) {
             $todo = $this->stepThroughAffectedPages();
             if($todo === false) return $this->storeError();
             return max($todo, 1); // force one more call
         }
 
+        if(@filesize($this->files['startpages']) > 1) {
+            $todo = $this->stepThroughStartPages($skip, $previousError, $skipSource);
+            if($todo === false) return $this->storeError();
+            return max($todo, 1);
+        }
+
+        if($this->options['copyonly'] && !empty($this->options['copyacl'])) {
+            if(!$this->copyAclRules()) return $this->storeError();
+        }
+
         // we're done here, clean up
         $this->abort();
         return 0;
+    }
+
+    /** Create queued start pages after moved content and link rewrites are complete. */
+    protected function stepThroughStartPages($skip = false, $skipMessage = '', $skipSource = 'unspecified') {
+        $file = fopen($this->files['startpages'], 'a+');
+        $remaining = $this->options['startpages_run'];
+        for($i = 0; $i < self::OPS_PER_RUN; $i++) {
+            if($i > 0 && !$this->hasExecutionTimeRemaining()) break;
+            $line = $this->getLastLine($file);
+            if($line === false) break;
+            list($namespace, $page) = explode("\t", trim($line), 2);
+
+            if($skip) {
+                $skip = false;
+                $log = $this->buildSkippedLogLine('P', $namespace, $page, $skipMessage, $skipSource);
+            } elseif(page_exists($page) || $this->namespaceHasPages($namespace)) {
+                $message = sprintf($this->getLang('start_page_skipped_nonempty'), $namespace);
+                $log = $this->buildSkippedLogLine('P', $namespace, $page, $message, 'namespace-not-empty');
+            } elseif(auth_quickaclcheck($page) < AUTH_CREATE) {
+                msg(sprintf($this->getLang('notargetperms'), $page), -1);
+                if($this->options['autoskip']) {
+                    $log = $this->buildAutoSkippedLogLine('P', $namespace, $page);
+                } else {
+                    $log = $this->build_log_line('P', $namespace, $page, false);
+                    $this->write_log($log);
+                    fclose($file);
+                    return false;
+                }
+            } else {
+                $title = ucfirst(str_replace('_', ' ', noNS($namespace)));
+                $text = str_replace('TITLE', $title, $this->options['start_page_template']);
+                saveWikiText($page, $text, $this->getLang('start_page_created_summary'));
+                if(!page_exists($page)) {
+                    msg(sprintf($this->getLang('start_page_create_failed'), $page), -1);
+                    if($this->options['autoskip']) {
+                        $log = $this->buildAutoSkippedLogLine('P', $namespace, $page);
+                    } else {
+                        $log = $this->build_log_line('P', $namespace, $page, false);
+                        $this->write_log($log);
+                        fclose($file);
+                        return false;
+                    }
+                } else {
+                    $log = $this->build_log_line('P', $namespace, $page, true);
+                }
+            }
+
+            ftruncate($file, ftell($file));
+            $remaining = --$this->options['startpages_run'];
+            $this->write_log($log);
+            $this->saveOptions();
+        }
+        fclose($file);
+        return $remaining;
     }
 
     /**
@@ -621,6 +693,11 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             if(!$copyOnly) $this->addImpactNamespace($paths, $conf['olddir'], $dst);
         }
 
+        foreach($this->tmpstore['startpages'] as $namespace => $dst) {
+            $this->addImpactNamespace($paths, $conf['datadir'], $dst);
+            $this->addImpactNamespace($paths, $conf['metadir'], $dst);
+        }
+
         foreach($mediaIds as $src => $dst) {
             if(!$copyOnly) {
                 $this->addImpactNamespace($paths, $conf['mediadir'], $src);
@@ -655,7 +732,7 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             }
         }
 
-        if($pageIds || $mediaIds) $this->addImpactDirectory($paths, $conf['indexdir'], '');
+        if($pageIds || $mediaIds || $this->tmpstore['startpages']) $this->addImpactDirectory($paths, $conf['indexdir'], '');
         if($copyOnly && !empty($this->options['copyacl'])) {
             global $config_cascade;
             if(!empty($config_cascade['acl']['default'])) {
@@ -700,6 +777,51 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
         $paths = array_merge($exact, $kept);
         sort($paths, SORT_STRING);
         return $paths;
+    }
+
+    /** Queue an index page for destination namespaces without an incoming page of their own. */
+    protected function prepareStartPages() {
+        if(empty($this->options['create_start_pages'])) return;
+        global $conf;
+
+        $startPageName = !empty($conf['start']) ? $conf['start'] : 'start';
+        $candidateNamespaces = array();
+        $pageNamespaces = array();
+        foreach(array($this->tmpstore['pages'], $this->tmpstore['miss']) as $pageMoves) {
+            foreach($pageMoves as $dst) {
+                $namespace = getNS($dst);
+                if($namespace !== false && $namespace !== '') $pageNamespaces[$namespace] = true;
+            }
+        }
+
+        foreach(array($this->tmpstore['pages'], $this->tmpstore['miss'], $this->tmpstore['media'], $this->tmpstore['miss_media']) as $moves) {
+            foreach($moves as $dst) {
+                $namespace = getNS($dst);
+                while($namespace !== false && $namespace !== '') {
+                    $candidateNamespaces[$namespace] = true;
+                    $separator = strrpos($namespace, ':');
+                    $namespace = $separator === false ? '' : substr($namespace, 0, $separator);
+                }
+            }
+        }
+
+        foreach($candidateNamespaces as $namespace => $unused) {
+            if(isset($pageNamespaces[$namespace])) continue;
+            $page = $namespace . ':' . $startPageName;
+            $this->tmpstore['startpages'][$namespace] = $page;
+        }
+    }
+
+    /** Check page files directly in a namespace without relying on the search index. */
+    protected function namespaceHasPages($namespace) {
+        global $conf;
+
+        $directory = rtrim($conf['datadir'], '/') . '/' . utf8_encodeFN(str_replace(':', '/', $namespace));
+        if(!is_dir($directory)) return false;
+        foreach(glob($directory . '/*.txt') as $pageFile) {
+            if(is_file($pageFile)) return true;
+        }
+        return false;
     }
 
     /** Add the directory containing an ID and its matching files to the impact list. */
@@ -760,7 +882,8 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             }
         }
 
-        foreach(array('P' => 'pagelist', 'M' => 'medialist') as $type => $list) {
+        foreach(array(array('P', 'pagelist'), array('M', 'medialist'), array('P', 'startpages')) as $listData) {
+            list($type, $list) = $listData;
             if(!is_readable($this->files[$list])) continue;
             foreach(file($this->files[$list], FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
                 $parts = explode("\t", $line, 2);
@@ -1292,6 +1415,7 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             'affpg' => $this->files['affected'],
             'miss'  => $this->files['missing'],
             'miss_media'  => $this->files['missing_media'],
+            'startpages' => $this->files['startpages'],
         );
 
         foreach($lists as $store => $file) {
@@ -1444,7 +1568,9 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
         } elseif($source === 'skip') {
             $message = sprintf($this->getLang('log_skipped_after_error'), $message);
         }
-        $message = sprintf($this->getLang('log_skipped_source'), $source, $message);
+        if($source !== 'namespace-not-empty') {
+            $message = sprintf($this->getLang('log_skipped_source'), $source, $message);
+        }
         $message = str_replace(array("\r", "\n", "\t"), ' ', $message);
         return "$now\t$date\t$type\t$from\t$to\tskipped\t$message\n";
     }

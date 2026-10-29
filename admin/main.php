@@ -68,7 +68,8 @@ class admin_plugin_move_main extends DokuWiki_Admin_Plugin {
                     $this->plan->nextStep();
                     break;
                 case 'skip':
-                    $this->plan->nextStep(true);
+                    error_log('[move-progress] skip=1 source=admin-skip-button autoskip=' . ($this->plan->getOption('autoskip') ? '1' : '0'));
+                    $this->plan->nextStep(true, 'admin-skip-button');
                     break;
                 case 'abort':
                     $this->plan->abort();

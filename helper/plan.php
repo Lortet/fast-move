@@ -403,8 +403,10 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
      * @return bool|int false on errors, otherwise the number of remaining steps
      * @throws Exception
      */
-    public function nextStep($skip = false) {
+    public function nextStep($skip = false, $skipSource = 'unspecified') {
         if(!$this->options['committed']) throw new Exception('plan is not committed yet!');
+
+        $previousError = $this->options['lasterror'];
 
         $this->executionStartedAt = isset($_SERVER['REQUEST_TIME_FLOAT'])
             ? (float) $_SERVER['REQUEST_TIME_FLOAT']
@@ -419,13 +421,13 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
         helper_plugin_move_rewrite::addLock();
 
         if(@filesize($this->files['pagelist']) > 1) {
-            $todo = $this->stepThroughDocuments(self::TYPE_PAGES, $skip);
+            $todo = $this->stepThroughDocuments(self::TYPE_PAGES, $skip, $previousError, $skipSource);
             if($todo === false) return $this->storeError();
             return max($todo, 1); // force one more call
         }
 
         if(@filesize($this->files['medialist']) > 1) {
-            $todo = $this->stepThroughDocuments(self::TYPE_MEDIA, $skip);
+            $todo = $this->stepThroughDocuments(self::TYPE_MEDIA, $skip, $previousError, $skipSource);
             if($todo === false) return $this->storeError();
             return max($todo, 1); // force one more call
         }
@@ -525,12 +527,27 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
                 $parts = explode("\t", $line, 7);
                 if(count($parts) < 6) continue;
                 $key = $parts[2] . "\t" . $parts[3] . "\t" . $parts[4];
+                $message = isset($parts[6]) ? $parts[6] : '';
+                if(
+                    $parts[5] === 'skipped' && $message === '' && isset($entries[$key]) &&
+                    $entries[$key]['status'] === 'failed'
+                ) {
+                    $message = $entries[$key]['message'];
+                }
+                if($parts[5] === 'skipped' && $message === '') {
+                    $reason = $parts[2] === 'M'
+                        ? $this->MoveOperator->getMediaBlockReason($parts[3], $parts[4])
+                        : $this->MoveOperator->getPageBlockReason($parts[3], $parts[4]);
+                    $message = $reason
+                        ? sprintf($this->getLang('log_skipped_detected_blocker'), $reason)
+                        : $this->getLang('log_skipped_no_blocker');
+                }
                 $entries[$key] = array(
                     'type' => $parts[2],
                     'src' => $parts[3],
                     'dst' => $parts[4],
                     'status' => $parts[5],
-                    'message' => isset($parts[6]) ? $parts[6] : '',
+                    'message' => $message,
                 );
             }
         }
@@ -585,7 +602,7 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
      * @param bool $skip should the first item be skipped?
      * @return bool|int false on error, otherwise the number of remaining documents
      */
-    protected function stepThroughDocuments($type = self::TYPE_PAGES, $skip = false) {
+    protected function stepThroughDocuments($type = self::TYPE_PAGES, $skip = false, $skipMessage = '', $skipSource = 'unspecified') {
 
         if($type == self::TYPE_PAGES) {
             $file    = $this->files['pagelist'];
@@ -619,18 +636,26 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             // should this item be skipped?
             if($skip === true) {
                 $skip = false;
-                $log .= $this->buildSkippedLogLine($mark, $src, $dst);
+                if(trim((string) $skipMessage) === '') {
+                    $skipMessage = $type == self::TYPE_MEDIA
+                        ? $this->MoveOperator->getMediaBlockReason($src, $dst)
+                        : $this->MoveOperator->getPageBlockReason($src, $dst);
+                    if(!$skipMessage) $skipMessage = $this->getLang('log_skipped_no_blocker');
+                }
+                $log .= $this->buildSkippedLogLine($mark, $src, $dst, $skipMessage, $skipSource);
             } else {
             // move the page
                 if(!$this->MoveOperator->$call($src, $dst)) {
-                    $log .= $this->build_log_line($mark, $src, $dst, false); // FAILURE!
-
                     // automatically skip this item only if wanted...
                     if(!$this->options['autoskip']) {
+                        $log .= $this->build_log_line($mark, $src, $dst, false); // FAILURE!
                         // ...otherwise abort the operation
+                        $this->write_log($log);
                         fclose($doclist);
                         $return_items_run = false;
                         break;
+                    } else {
+                        $log .= $this->buildAutoSkippedLogLine($mark, $src, $dst);
                     }
                 } else {
                     $warning = $this->MoveOperator->getLastWarning();
@@ -1160,7 +1185,10 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             $msg = '';
         } else {
             $ok  = 'failed';
-            $msg = $MSG[count($MSG) - 1]['msg']; // get detail from message array
+            $msg = is_array($MSG) && count($MSG)
+                ? $MSG[count($MSG) - 1]['msg']
+                : $this->getLang('log_error');
+            $msg = str_replace(array("\r", "\n", "\t"), ' ', $msg);
         }
 
         $log = "$now\t$date\t$type\t$from\t$to\t$ok\t$msg\n";
@@ -1175,10 +1203,32 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
      * @param string $to
      * @return string
      */
-    protected function buildSkippedLogLine($type, $from, $to) {
+    protected function buildSkippedLogLine($type, $from, $to, $message = '', $source = 'unspecified') {
         $now = time();
         $date = date('Y-m-d H:i:s', $now);
-        return "$now\t$date\t$type\t$from\t$to\tskipped\t\n";
+        if(trim((string) $message) === '') {
+            $message = $this->getLang('log_skipped_no_blocker');
+        } elseif($source === 'skip') {
+            $message = sprintf($this->getLang('log_skipped_after_error'), $message);
+        }
+        $message = sprintf($this->getLang('log_skipped_source'), $source, $message);
+        $message = str_replace(array("\r", "\n", "\t"), ' ', $message);
+        return "$now\t$date\t$type\t$from\t$to\tskipped\t$message\n";
+    }
+
+    /** Record a failed item skipped by the automatic error handling option. */
+    protected function buildAutoSkippedLogLine($type, $from, $to) {
+        global $MSG;
+
+        $message = is_array($MSG) && count($MSG)
+            ? $MSG[count($MSG) - 1]['msg']
+            : $this->getLang('log_error');
+        $message = str_replace(array("\r", "\n", "\t"), ' ', $message);
+        $message = sprintf($this->getLang('log_error_skipped'), $message);
+
+        $now = time();
+        $date = date('Y-m-d H:i:s', $now);
+        return "$now\t$date\t$type\t$from\t$to\tskipped\t$message\n";
     }
 
     /**

@@ -32,7 +32,7 @@ jQuery('#plugin_move__progress').each(function () {
      *
      * @param {bool} skip should an error be skipped?
      */
-    var nextStep = function(skip) {
+    var nextStep = function(skip, skipSource) {
         // clear error output
         $this.find('.output').html('');
         $this.find('.output').removeClass('has-error');
@@ -45,8 +45,9 @@ jQuery('#plugin_move__progress').each(function () {
             DOKU_BASE + 'lib/exe/ajax.php',
             {
                 call: 'plugin_move_progress',
-                skip: skip === true || skip === '1',
-                autoskip: $this.find('.move-autoskip-toggle').is(':checked')
+                skip: (skip === true || skip === '1') ? 1 : 0,
+                skip_source: skipSource || 'continue',
+                autoskip: $this.find('.move-autoskip-toggle').is(':checked') ? 1 : 0
             },
             function (data) {
                 $progressbar.progressbar('option', 'value', data.progress);
@@ -56,7 +57,7 @@ jQuery('#plugin_move__progress').each(function () {
                 if (data.error) {
                     $this.find('.output').html('<p><div class="error">' + data.error + '</div></p>').addClass('has-error');
                     if($this.find('.move-autoskip-toggle').is(':checked')) {
-                        nextStep(true);
+                        nextStep(true, 'autoskip-after-error');
                     } else {
                         setButtons(true);
                     }
@@ -66,7 +67,8 @@ jQuery('#plugin_move__progress').each(function () {
                     $this.find('.controls form').addClass('hide');
                 } else {
                     // do it again
-                    nextStep(skip);
+                    // A skip command applies to exactly one item, never later AJAX requests.
+                    nextStep(false, 'continue');
                 }
             }
         );
@@ -82,15 +84,17 @@ jQuery('#plugin_move__progress').each(function () {
         jQuery('#plugin_move__preview').remove();
 
         // should the next error be skipped?
-        var skip = e.target.form.skip.value;
+        var form = jQuery(this).closest('form');
+        var skip = form.find('[name="skip"]').val();
+        var skipSource = form.find('[name="ctl"]').val() || 'continue';
 
         // step on it
-        nextStep(skip);
+        nextStep(skip, skipSource);
     });
 
     $this.find('.move-autoskip-toggle').change(function() {
         if(this.checked && $this.find('.output').hasClass('has-error')) {
-            nextStep(true);
+            nextStep(true, 'autoskip-checkbox-enabled-after-error');
         }
     });
 

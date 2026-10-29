@@ -65,6 +65,11 @@ $lang['log_copied']   = 'Copied';
 $lang['log_error']    = 'Error';
 $lang['log_warning']  = 'Moved with warning';
 $lang['log_skipped']  = 'Skipped';
+$lang['log_skipped_detected_blocker'] = 'Blocker detected when skipped: %s';
+$lang['log_skipped_no_blocker'] = 'No blocker was detected when skipped. The source of this signal was not recorded for this entry.';
+$lang['log_skipped_after_error'] = 'Step skipped after the previous error: %s';
+$lang['log_error_skipped'] = 'Automatically skipped after failure: %s';
+$lang['log_skipped_source'] = 'Skip signal received (%s). Details: %s';
 $lang['log_pending']  = 'Pending';
 
 // Form labels

@@ -54,8 +54,23 @@ class action_plugin_move_progress extends DokuWiki_Action_Plugin {
             // There is no plan. Something went wrong
             $return['complete'] = true;
         } else {
-            $plan->setAutoSkip($INPUT->bool('autoskip'));
-            $todo               = $plan->nextStep($INPUT->bool('skip'));
+            $rawSkip = $INPUT->str('skip');
+            $rawAutoSkip = $INPUT->str('autoskip');
+            $skip = $rawSkip === '1';
+            $autoSkip = $rawAutoSkip === '1';
+            $plan->setAutoSkip($autoSkip);
+            $skipSource = preg_replace('/[^a-zA-Z0-9_.:-]/', '', $INPUT->str('skip_source'));
+            if($skipSource === '') $skipSource = 'unspecified';
+            error_log(sprintf(
+                '[move-progress] user=%s skip=%s raw_skip=%s source=%s autoskip=%s raw_autoskip=%s',
+                $_SERVER['REMOTE_USER'],
+                $skip ? '1' : '0',
+                $rawSkip === '' ? '<empty>' : $rawSkip,
+                $skipSource,
+                $autoSkip ? '1' : '0',
+                $rawAutoSkip === '' ? '<empty>' : $rawAutoSkip
+            ));
+            $todo = $plan->nextStep($skip, $skipSource);
             $return['progress'] = $plan->getProgress();
             $return['error']    = $plan->getLastError();
             if($todo === 0) $return['complete'] = true;

@@ -103,6 +103,19 @@ class helper_plugin_move_op extends DokuWiki_Plugin {
         return true;
     }
 
+    /** Return the first current page-operation blocker without emitting a UI message. */
+    public function getPageBlockReason($src, $dst) {
+        if(!page_exists($src)) return sprintf($this->getLang('notexist'), $src);
+        if(auth_quickaclcheck($src) < AUTH_EDIT) return sprintf($this->getLang('norights'), $src);
+        if(!$this->ignoreLocks && (checklock($src) !== false || @file_exists(wikiLockFN($src)))) {
+            return sprintf($this->getLang('filelocked'), $src);
+        }
+        if($src == $dst) return sprintf($this->getLang('notchanged'), $src);
+        if(page_exists($dst)) return sprintf($this->getLang('exists'), $src, $dst);
+        if(auth_quickaclcheck($dst) < AUTH_CREATE) return sprintf($this->getLang('notargetperms'), $dst);
+        return false;
+    }
+
     /**
      * Check if the given media file can be moved to the given destination
      *
@@ -146,6 +159,19 @@ class helper_plugin_move_op extends DokuWiki_Plugin {
         }
 
         return true;
+    }
+
+    /** Return the first current media-operation blocker without emitting a UI message. */
+    public function getMediaBlockReason($src, $dst) {
+        if(!file_exists(mediaFN($src))) return sprintf($this->getLang('medianotexist'), $src);
+        if(auth_quickaclcheck($src) < AUTH_DELETE) return sprintf($this->getLang('nomediarights'), $src);
+        if($src == $dst) return sprintf($this->getLang('medianotchanged'), $src);
+        if(@file_exists(mediaFN($dst))) return sprintf($this->getLang('mediaexists'), $src, $dst);
+        if(auth_quickaclcheck($dst) < AUTH_UPLOAD) return sprintf($this->getLang('nomediatargetperms'), $dst);
+        if(pathinfo(mediaFN($src), PATHINFO_EXTENSION) !== pathinfo(mediaFN($dst), PATHINFO_EXTENSION)) {
+            return $this->getLang('extensionchange');
+        }
+        return false;
     }
 
     /**

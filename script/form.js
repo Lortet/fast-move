@@ -7,8 +7,12 @@ jQuery('form.plugin_move_form').each(function(){
     }).click();
 
     $form.find('.click-ns').click(function() {
-        $form.find('input[name=dst]').val($form.find('.click-ns code').text());
+        $form.find('input[name=dst]').val($form.find('select[name=srcns]').val());
         $form.find('.select').show();
+    });
+
+    $form.find('select[name=srcns]').change(function() {
+        $form.find('input[name=dst]').val(jQuery(this).val());
     });
 
 });

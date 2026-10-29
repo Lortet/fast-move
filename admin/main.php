@@ -112,13 +112,15 @@ class admin_plugin_move_main extends DokuWiki_Admin_Plugin {
         if($ID && $INPUT->has('dst')) {
             // input came from form
             $dst = trim($INPUT->str('dst'));
-            if($dst == '') {
+            $isNamespaceMove = $INPUT->str('class') == 'namespace';
+            if($dst == ':') $dst = '';
+            if($dst == '' && !$isNamespaceMove) {
                 msg($this->getLang('nodst'), -1);
                 return false;
             }
 
-            if($INPUT->str('class') == 'namespace') {
-                $src = getNS($ID);
+            if($isNamespaceMove) {
+                $src = $INPUT->has('srcns') ? $INPUT->str('srcns') : getNS($ID);
             } else {
                 $src = $ID;
             }
@@ -128,7 +130,7 @@ class admin_plugin_move_main extends DokuWiki_Admin_Plugin {
                 return false;
             }
 
-            if($INPUT->str('class') == 'namespace') {
+            if($isNamespaceMove) {
                 if($INPUT->str('type') == 'both') {
                     $this->plan->addPageNamespaceMove($src, $dst);
                     $this->plan->addMediaNamespaceMove($src, $dst);
@@ -174,6 +176,7 @@ class admin_plugin_move_main extends DokuWiki_Admin_Plugin {
      */
     protected function GUI_simpleForm() {
         global $ID;
+        global $conf;
 
         echo $this->locale_xhtml('move');
 
@@ -188,8 +191,23 @@ class admin_plugin_move_main extends DokuWiki_Admin_Plugin {
 
         $form->startFieldset($this->getLang('legend'));
 
+        $currentNamespace = getNS($ID);
+        $namespaceLabel = $currentNamespace === '' ? $this->getLang('root') . ' <code>:</code>' : '<code>' . $currentNamespace . '</code>';
         $form->addElement(form_makeRadioField('class', 'page', $this->getLang('movepage') . ' <code>' . $ID . '</code>', '', 'block radio click-page', array('checked' => 'checked')));
-        $form->addElement(form_makeRadioField('class', 'namespace', $this->getLang('movens') . ' <code>' . getNS($ID) . '</code>', '', 'block radio click-ns'));
+        $form->addElement(form_makeRadioField('class', 'namespace', $this->getLang('movens') . ' ' . $namespaceLabel, '', 'block radio click-ns'));
+
+        $namespaceOptions = array(
+            '' => $this->getLang('root') . ' (:)'
+        );
+        if($currentNamespace !== '') {
+            $namespaceOptions[$currentNamespace] = $currentNamespace;
+        }
+        $namespacePath = $conf['datadir'] . '/' . utf8_encodeFN(str_replace(':', '/', $ID));
+        $mediaPath = $conf['mediadir'] . '/' . utf8_encodeFN(str_replace(':', '/', $ID));
+        if($ID !== '' && $ID !== $currentNamespace && (is_dir($namespacePath) || is_dir($mediaPath))) {
+            $namespaceOptions[$ID] = $ID;
+        }
+        $form->addElement(form_makeMenuField('srcns', $namespaceOptions, $currentNamespace, $this->getLang('source_namespace'), '', 'block indent select'));
 
         $form->addElement(form_makeTextField('dst', $ID, $this->getLang('dst'), '', 'block indent'));
         $form->addElement(form_makeMenuField('type', array('pages' => $this->getLang('move_pages'), 'media' => $this->getLang('move_media'), 'both' => $this->getLang('move_media_and_pages')), 'both', $this->getLang('content_to_move'), '', 'block indent select'));

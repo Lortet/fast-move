@@ -87,6 +87,7 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
             'namespaces' => $conf['metadir'] . '/__move_namespaces',
             'missing'    => $conf['metadir'] . '/__move_missing',
             'missing_media'    => $conf['metadir'] . '/__move_missing_media',
+            'copymap'    => $conf['metadir'] . '/__move_copymap',
         );
 
         $this->MoveOperator = plugin_load('helper', 'move_op');
@@ -120,6 +121,7 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
 
             // options
             'autoskip'    => $this->getConf('autoskip'),
+            'ignorelocks' => false,
             'autorewrite' => $this->getConf('autorewrite'),
             'copyonly'    => false,
 
@@ -356,14 +358,22 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
                         $this->addToDocumentList($move['src'], $move['dst'], self::CLASS_NS);
                     }
                 }
-                if(!$this->options['copyonly']) {
-                    $this->findMissingDocuments($move['src'] . ':', $move['dst'],$move['type']);
-                }
+                $this->findMissingDocuments($move['src'] . ':', $move['dst'],$move['type']);
             }
             // store what pages are affected by this move
             if(!$this->options['copyonly']) {
                 $this->findAffectedPages($move['src'], $move['dst'], $move['class'], $move['type']);
             }
+        }
+
+        if($this->options['copyonly']) {
+            $copyMaps = array(
+                'pages' => array_merge($this->tmpstore['miss'], $this->tmpstore['pages']),
+                'media' => array_merge($this->tmpstore['miss_media'], $this->tmpstore['media']),
+            );
+            io_saveFile($this->files['copymap'], serialize($copyMaps));
+            $this->tmpstore['miss'] = array();
+            $this->tmpstore['miss_media'] = array();
         }
 
         $this->storeDocumentLists();
@@ -580,6 +590,12 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
 
         $doclist = fopen($file, 'a+');
 
+        if($this->options['copyonly']) {
+            $copyMaps = $this->getCopyMaps();
+            $this->MoveOperator->setCopyMaps($copyMaps['pages'], $copyMaps['media']);
+        }
+        $this->MoveOperator->setIgnoreLocks(!empty($this->options['ignorelocks']));
+
         for($i = 0; $i < helper_plugin_move_plan::OPS_PER_RUN; $i++) {
             if($i > 0 && !$this->hasExecutionTimeRemaining()) break;
             $log = "";
@@ -679,6 +695,21 @@ class helper_plugin_move_plan extends DokuWiki_Plugin {
         $budget = $maxExecutionTime * ($percentage / 100);
 
         return (microtime(true) - $this->executionStartedAt) < $budget;
+    }
+
+    /**
+     * Load the complete mapping so links inside copied pages target their copied peers.
+     *
+     * @return array
+     */
+    protected function getCopyMaps() {
+        if(!is_readable($this->files['copymap'])) return array('pages' => array(), 'media' => array());
+        $maps = @unserialize(io_readFile($this->files['copymap'], false));
+        if(!is_array($maps)) return array('pages' => array(), 'media' => array());
+        return array(
+            'pages' => isset($maps['pages']) && is_array($maps['pages']) ? $maps['pages'] : array(),
+            'media' => isset($maps['media']) && is_array($maps['media']) ? $maps['media'] : array(),
+        );
     }
 
     /**

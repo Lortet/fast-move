@@ -94,6 +94,22 @@ class helper_plugin_move_rewrite extends Plugin {
     }
 
     /**
+     * Set rewrite metadata on a copied page without marking any other page as affected.
+     *
+     * @param string $id copied page ID
+     * @param string $origin original page ID, used for relative links
+     * @param array $pages page ID mapping
+     * @param array $media media ID mapping
+     */
+    public function setCopyMoveMeta($id, $origin, $pages, $media) {
+        $meta = $this->getMoveMeta($id);
+        $meta['origin'] = $origin;
+        foreach($pages as $src => $dst) $meta['pages'][] = array($src, $dst);
+        foreach($media as $src => $dst) $meta['media'][] = array($src, $dst);
+        p_set_metadata($id, array(self::METAKEY => $meta), false, true);
+    }
+
+    /**
      * Add info about several moved documents to the metadata of an affected page
      *
      * @param string $id    affected page

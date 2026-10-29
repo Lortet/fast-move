@@ -25,6 +25,27 @@ class helper_plugin_move_op extends DokuWiki_Plugin {
     /** @var string|false Non-fatal warning from the most recent operation */
     protected $lastWarning = false;
 
+    /** @var array Page and media mappings used when copying a namespace */
+    protected $copyPageMoves = array();
+    protected $copyMediaMoves = array();
+    protected $ignoreLocks = false;
+
+    /** Configure whether page locks should block an operation. */
+    public function setIgnoreLocks($ignore) {
+        $this->ignoreLocks = (bool) $ignore;
+    }
+
+    /**
+     * Set the complete page and media maps for a copy operation.
+     *
+     * @param array $pages
+     * @param array $media
+     */
+    public function setCopyMaps($pages, $media) {
+        $this->copyPageMoves = $pages;
+        $this->copyMediaMoves = $media;
+    }
+
     /**
      * Get the non-fatal warning from the most recent move.
      *
@@ -56,7 +77,7 @@ class helper_plugin_move_op extends DokuWiki_Plugin {
         // checklock checks if the page lock hasn't expired and the page hasn't been locked by another user
         // the file exists check checks if the page is reported unlocked if a lock exists which means that
         // the page is locked by the current user
-        if(checklock($src) !== false || @file_exists(wikiLockFN($src))) {
+        if(!$this->ignoreLocks && (checklock($src) !== false || @file_exists(wikiLockFN($src)))) {
             msg(sprintf($this->getLang('filelocked'), $src), -1);
             return false;
         }
@@ -148,6 +169,11 @@ class helper_plugin_move_op extends DokuWiki_Plugin {
             msg(sprintf($this->getLang('copyfailed'), $src, $dst), -1);
             return false;
         }
+
+        /** @var helper_plugin_move_rewrite $Rewriter */
+        $Rewriter = plugin_load('helper', 'move_rewrite');
+        $Rewriter->setCopyMoveMeta($dst, $src, $this->copyPageMoves, $this->copyMediaMoves);
+        if($Rewriter->rewritePage($dst) === false) return false;
 
         return true;
     }

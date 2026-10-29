@@ -102,6 +102,7 @@ class admin_plugin_move_main extends DokuWiki_Admin_Plugin {
         if($this->plan->isCommited()) return false;
 
         $this->plan->setOption('autoskip', $INPUT->bool('autoskip'));
+        $this->plan->setOption('ignorelocks', $INPUT->bool('ignorelocks'));
         $this->plan->setOption('autorewrite', $INPUT->bool('autorewrite'));
         $this->plan->setOption('copyonly', $INPUT->bool('copyonly'));
 
@@ -191,6 +192,7 @@ class admin_plugin_move_main extends DokuWiki_Admin_Plugin {
         $form->addElement(form_makeMenuField('type', array('pages' => $this->getLang('move_pages'), 'media' => $this->getLang('move_media'), 'both' => $this->getLang('move_media_and_pages')), 'both', $this->getLang('content_to_move'), '', 'block indent select'));
 
         $form->addElement(form_makeCheckboxField('autoskip', '1', $this->getLang('autoskip'), '', 'block', ($this->getConf('autoskip') ? array('checked' => 'checked') : array())));
+        $form->addElement(form_makeCheckboxField('ignorelocks', '1', $this->getLang('ignorelocks'), '', 'block'));
         $form->addElement(form_makeCheckboxField('autorewrite', '1', $this->getLang('autorewrite'), '', 'block', ($this->getConf('autorewrite') ? array('checked' => 'checked') : array())));
         $form->addElement(form_makeCheckboxField('copyonly', '1', $this->getLang('copyonly'), '', 'block'));
 
